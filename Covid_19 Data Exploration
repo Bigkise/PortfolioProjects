@@ -1,0 +1,133 @@
+/*
+Covid-19 Data Exploration
+Skills used: Import tables with the correct data type, Aggregate Functions, Joins, CTE's, Temp Tables, Creating Views
+Data source: Hannah Ritchie, Esteban Ortiz-Ospina, Diana Beltekian, Edouard Mathieu, Joe Hasell, Bobbie Macdonald, Charlie Giattino, Cameron Appel, Lucas Rodés-Guirao and Max Roser (2020) - "Coronavirus Pandemic (COVID-19)". Published online at OurWorldInData.org. Retrieved from: 'https://ourworldindata.org/coronavirus' [Online Resource]
+*/
+ 
+-- Check with Deaths table
+ 
+SELECT location, date, total_cases, new_cases, total_deaths, population
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE location like 'United_States'
+ORDER BY 1,2
+ 
+-- Looking at total cases vs total deaths
+ 
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 AS death_percentage
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE location like 'United_States'
+ORDER BY 1,2
+ 
+-- Looking at the total cases vs total population
+ 
+SELECT location, date, total_cases, population, (total_cases/population)*100 AS death_percentage
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE location like 'United_States'
+ORDER BY 1,2
+ 
+--Looking at Countries with Highest Infection Rate compared to Population
+ 
+SELECT location, population, MAX(total_cases) AS highest_infection_count, MAX((total_cases/population))*100 AS percent_population_infected
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+GROUP BY location, population
+ORDER BY percent_population_infected DESC;
+ 
+--Looking by continents with highest total death count
+ 
+SELECT location, MAX(cast(total_deaths AS int)) AS total_death_count
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+Where continent is null
+GROUP BY location
+ORDER BY Total_death_count DESC;
+ 
+--Global Numbers
+ 
+SELECT date, SUM(new_cases)
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE continent is not null
+GROUP BY date
+ORDER BY 1,2
+ 
+-- New Precentage Deaths
+ 
+SELECT date, SUM(new_cases), SUM(cast(new_deaths AS int)), SUM(cast(new_deaths AS int))/SUM(new_cases)*100 death_percentage
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE continent is not null
+GROUP BY date
+ORDER BY 1,2
+ 
+-- totals
+ 
+SELECT date, SUM(new_cases) AS total_cases, SUM(cast(new_deaths AS int)) AS total_deaths, SUM(cast(new_deaths AS int))/SUM(new_cases)*100 death_percentage
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE continent is not null
+GROUP BY date
+ORDER BY 1,2
+ 
+-- Total cases vs total deaths to find percentages
+ 
+SELECT SUM(new_cases) AS total_cases, SUM(cast(new_deaths AS int)) AS total_deaths, SUM(cast(new_deaths AS int))/SUM(new_cases)*100 death_percentage
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`
+WHERE continent is not null
+ORDER BY 1,2
+ 
+-- Select the data you are going to work with. “Covid_vaccinations and Covid_deaths” join both tables
+ 
+SELECT *
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`death
+ INNER JOIN `big1-368500.Covid_Vaccinations.Covid_Vaccinations`vaccinations
+ On Death.location = Vaccinations.location
+ and Death.date = Vaccinations.date
+ 
+--Looking at total populations vs vaccinations
+ 
+With Population_vaccination
+AS (
+SELECT Death.continent, Death.location, Death.date, Death.population, Vaccinations.new_vaccinations, SUM(CAST(vaccinations.new_vaccinations AS int)) OVER (PARTITION BY Death.location   ORDER BY death.location, death.date) AS rolling_people_vaccinated,
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`death
+ INNER JOIN `big1-368500.Covid_Vaccinations.Covid_Vaccinations`vaccinations
+ On Death.location = Vaccinations.location
+ and Death.date = Vaccinations.date
+)
+SELECT*, (rolling_people_vaccinated/population)*100
+FROM Population_vaccination
+ 
+--temp table
+ 
+DROP TABLE Covid_Deaths.Percent_population_vaccinated;
+CREATE TABLE Covid_Deaths.Percent_population_vaccinated
+(
+ continent string(255),
+ location string(255),
+ Date datetime,
+ Population numeric,
+ New_vaccinations numeric,
+ rolling_people_vaccinations numeric,
+);
+INSERT INTO Covid_Deaths.Percent_population_vaccinated
+ SELECT Death.continent, Death.location, Death.date, Death.population, Vaccinations.new_vaccinations, SUM(CAST(vaccinations.new_vaccinations AS int)) OVER (PARTITION  BY Death.location   ORDER BY death.location, death.date) AS rolling_people_vaccinated,
+ FROM `big1-368500.Covid_Deaths.Covid_Deaths`death
+ INNER JOIN `big1-368500.Covid_Vaccinations.Covid_Vaccinations`vaccinations
+ On Death.location = Vaccinations.location
+ and Death.date = Vaccinations.date
+ WHERE Death.continent is not null
+ ORDER BY 2,3;
+ 
+SELECT*, (rolling_people_vaccinations/population)*100
+FROM Covid_Deaths.Percent_population_vaccinated
+ 
+--Creating view to store for later visualizations
+CREATE VIEW Covid_Deaths.Percent_population_vaccinatedView AS
+SELECT Death.continent, Death.location, Death.date, Death.population, Vaccinations.new_vaccinations, SUM(CAST(vaccinations.new_vaccinations AS int)) OVER (PARTITION  BY Death.location   ORDER BY death.location, death.date) AS rolling_people_vaccinated,
+FROM `big1-368500.Covid_Deaths.Covid_Deaths`death
+INNER JOIN `big1-368500.Covid_Vaccinations.Covid_Vaccinations`vaccinations
+On Death.location = Vaccinations.location
+and Death.date = Vaccinations.date
+WHERE Death.continent is not null
+ORDER BY 2,3;
+ 
+-- Check the View
+SELECT*
+FROM Covid_Deaths.Percent_population_vaccinatedView
+ 
+--DROP VIEW IF EXISTS Covid_Deaths.Percent_population_vaccinatedView
